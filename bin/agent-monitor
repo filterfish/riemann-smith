@@ -1,0 +1,144 @@
+#!/usr/bin/env ruby
+
+require 'pp'
+require 'riemann'
+require 'sys/proctable'
+require 'smith'
+
+include Smith
+
+OptionParser.accept(Pathname) {|p,| Pathname.new(p) if p}
+options = {:period => 20, :agents => [], :tags => []}
+
+parser = OptionParser.new do |opts|
+  opts.separator "\n"
+  opts.set_summary_indent "    "
+
+  opts.banner = "\nUsage: #{opts.program_name} OPTIONS"
+  opts.on_head "\n  Query the specified index[es] and print the results to STDOUT"
+
+  opts.on("--period <T>", Integer, "Polling period in seconds") { |t| options[:period] = t }
+  opts.on("--tag <tag1,tag1,...>", Array, "Tags to add to the alert") { |t| options[:tags] = t }
+  opts.on("--agents <agent1,agent2,...>", Array, "Agents to monitor") { |v| options[:agents] = v }
+  opts.on("--file   <filename>", Pathname, "File containing a list of agents. One agent per line") do |f|
+    if f.exist?
+      options[:agents] = f.readlines.map(&:strip)
+      if options[:agents].empty?
+        parser.abort("Agents file is empty: #{f}")
+      end
+    else
+      parser.abort("Agents file does not exist: #{f}")
+    end
+  end
+  opts.separator "\n"
+end
+parser.parse!
+
+if options[:agents].empty?
+  parser.abort("You must specify either --agents or --file")
+elsif options[:agents]  && options[:file]
+  parser.abort("You cannot specify both --agents and --file")
+end
+
+class Check
+
+  RIEMANN_SERVICE_NAME = "smith"
+
+  def initialize(queue, agents, opts={})
+    @queue = queue
+    @agents = agents
+    @options = opts
+  end
+
+  def run_check
+    @queue.on_timeout(@timeout) { |message_id| @on_error.call(:description => "Agency timeout.", :service => service("agency"), :tags => @options[:tags], :state => 'timeout') }
+
+    @queue.on_reply(:auto_ack => true, :reply_queue_name => "riemann.#{Digest::SHA1.hexdigest($$.to_s)}") do |reply_payload, r|
+      check(reply_payload[:response]).each do |agent|
+        @on_check.call(agent)
+      end
+    end
+
+    @queue.consumer_count do |count|
+      if count > 0
+        @queue.publish(Smith::ACL::AgencyCommand.new(:command => 'list', :args => ['-a', '-l']))
+      else
+        @on_error.call(:description => "Agency not running.", :service => service("agency"), :tags => @options[:tags], :state => 'dead')
+      end
+    end
+  end
+
+  def on_error(&blk)
+    @on_error = blk
+  end
+
+  def on_check(&blk)
+    @on_check = blk
+  end
+
+  # Checks that the list of agents return from the list command matches
+  # the list of know agents and composes an appropriate alert.
+  def check(response)
+    listed_agents = parse_response(response)
+
+    @agents.map do |agent_name|
+      agent_entry = listed_agents[agent_name]
+      if agent_entry
+        alert(agent_entry)
+      else
+        alert(:name => agent_name, :state => 'dead', :service => service(agent_name))
+      end
+    end
+  end
+
+  # Returns a Nested hash representing the running agents.
+  def parse_response(response)
+    split_response = response.split(/\n/)
+    ((/^total/.match(split_response.first)) ? split_response[1..-1] : []).inject({}) do |a, entry|
+      a.tap do |acc|
+        fields = entry.split(/ +/).map(&:strip)
+        acc[fields.last] = {}.tap do |res|
+          res[:given_state] = fields[0]
+          res[:uuid] = fields[1]
+          res[:pid] = fields[2]
+          res[:date] = fields[3]
+          res[:description] = fields.last
+        end
+      end
+    end
+  end
+
+  # Construct an alert messages
+  def alert(entry)
+    {:tags => @options[:tag], :state => Sys::ProcTable.ps(entry[:pid].to_i) ? 'ok' : 'dead', :service => service(entry[:description])}.merge(entry)
+  end
+
+  # Return the service name
+  def service(name)
+    "#{RIEMANN_SERVICE_NAME} #{name}"
+  end
+end
+
+include Smith::Logger
+
+log_level :info
+
+Smith.compile_acls
+
+riemann = Riemann::Client.new
+
+period = options.delete(:period)
+agents = options.delete(:agents)
+
+
+Smith.start do
+  Messaging::Sender.new(QueueDefinitions::Agency_control) do |queue|
+    checker = Check.new(queue, agents, options)
+
+    # Send alerts to Riemann
+    checker.on_check { |check| riemann << check }
+    checker.on_error { |error| riemann << error }
+
+    EM.add_periodic_timer(period) { checker.run_check }
+  end
+end
