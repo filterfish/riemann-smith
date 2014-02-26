@@ -17,7 +17,9 @@ parser = OptionParser.new do |opts|
   opts.banner = "\nUsage: #{opts.program_name} OPTIONS"
   opts.on_head "\n  Query the specified index[es] and print the results to STDOUT"
 
-  opts.on("--period <T>", Integer, "Polling period in seconds") { |t| options[:period] = t }
+  opts.on("--period <T>", Integer, "Polling period in seconds") { |u| options[:period] = t }
+  opts.on("--host <H>", String, "Riemann host") { |v| options[:host] = v }
+  opts.on("--port <P>", Integer, "Riemann port") { |v| options[:port] = v }
   opts.on("--tag <tag1,tag1,...>", Array, "Tags to add to the alert") { |t| options[:tags] = t }
   opts.on("--agents <agent1,agent2,...>", Array, "Agents to monitor") { |v| options[:agents] = v }
   opts.on("--file   <filename>", Pathname, "File containing a list of agents. One agent per line") do |f|
@@ -33,6 +35,10 @@ parser = OptionParser.new do |opts|
   opts.separator "\n"
 end
 parser.parse!
+
+if options[:host].nil?
+  parser.abort("You must specify the riemann host")
+end
 
 if options[:agents].empty?
   parser.abort("You must specify either --agents or --file")
