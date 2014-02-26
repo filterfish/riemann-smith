@@ -60,7 +60,7 @@ class Check
     @queue.on_timeout(@timeout) { |message_id| @on_error.call(:description => "Agency timeout.", :service => service("agency"), :tags => @options[:tags], :state => 'timeout') }
 
     @queue.on_reply(:auto_ack => true, :reply_queue_name => "riemann.#{Digest::SHA1.hexdigest($$.to_s)}") do |reply_payload, r|
-      check(reply_payload[:response]).each do |agent|
+      check(reply_payload.response).each do |agent|
         @on_check.call(agent)
       end
     end
