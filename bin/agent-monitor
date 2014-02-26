@@ -5,8 +5,6 @@ require 'riemann'
 require 'sys/proctable'
 require 'smith'
 
-include Smith
-
 OptionParser.accept(Pathname) {|p,| Pathname.new(p) if p}
 options = {:period => 20, :agents => [], :tags => []}
 
@@ -131,14 +129,14 @@ log_level :info
 
 Smith.compile_acls
 
-riemann = Riemann::Client.new
+riemann = Riemann::Client.new(:host => options[:host], :port => options[:port])
 
 period = options.delete(:period)
 agents = options.delete(:agents)
 
 
 Smith.start do
-  Messaging::Sender.new(QueueDefinitions::Agency_control) do |queue|
+  Smith::Messaging::Sender.new(Smith::QueueDefinitions::Agency_control) do |queue|
     checker = Check.new(queue, agents, options)
 
     # Send alerts to Riemann
