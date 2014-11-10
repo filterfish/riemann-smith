@@ -18,6 +18,7 @@ Gem::Specification.new do |s|
 	s.add_dependency "smith", "~> 0.6"
 	s.add_dependency "sys-proctable"
 
+	s.add_development_dependency 'yard'
 	s.add_development_dependency 'bundler'
 	s.add_development_dependency 'rake'
 
