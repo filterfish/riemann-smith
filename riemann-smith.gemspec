@@ -5,7 +5,7 @@ Gem::Specification.new do |s|
 	s.version = GVB.version
 	s.date    = GVB.date
 
-	s.summary = 'Monitor smith agents, reporting to Riemann"
+	s.summary = "Monitor smith agents, reporting to Riemann"
 
 	s.homepage = "https://github.com/filterfish/riemann-smith"
 	s.license = "GPL-3.0"
