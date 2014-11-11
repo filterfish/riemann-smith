@@ -21,6 +21,7 @@ Gem::Specification.new do |s|
 	s.add_development_dependency 'yard'
 	s.add_development_dependency 'bundler'
 	s.add_development_dependency 'rake'
+	s.add_development_dependency 'github-release'
 
 	s.files = `git ls-files -z bin doc`.split("\0")
 end
