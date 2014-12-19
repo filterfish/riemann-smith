@@ -23,5 +23,7 @@ Gem::Specification.new do |s|
   s.add_development_dependency 'rake'
   s.add_development_dependency 'github-release'
 
+  s.executables = %w{queue-lengths riemann-smith}
+
   s.files = `git ls-files -z bin doc`.split("\0")
 end
