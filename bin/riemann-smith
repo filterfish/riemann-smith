@@ -45,7 +45,8 @@ class Smith::Riemann
           results = parse_response(reply_payload.response)
 
           options[:agents].each do |agent|
-            if results.has_key?(agent) and Sys::ProcTable.ps(results[agent][:pid].to_i)
+            if results.has_key?(agent) and results[agent].any? { |a| a[:state] == "running" and Sys::ProcTable.ps(a[:pid].to_i) }
+              $stderr.puts "#{agent}: ok"
               report(
                 :host        => options[:event_host],
                 :service     => "#{options[:service_name]}.#{agent}",
@@ -53,6 +54,7 @@ class Smith::Riemann
                 :description => "Agent is running"
               )
             else
+              $stderr.puts "#{agent}: critical"
               report(
                 :host        => options[:event_host],
                 :service     => "#{options[:service_name]}.#{agent}",
@@ -87,18 +89,14 @@ class Smith::Riemann
 
   # Returns a Nested hash representing the running agents.
   def parse_response(response)
-    split_response = response.split(/\n/)
-    ((/^total/.match(split_response.first)) ? split_response[1..-1] : []).inject({}) do |a, entry|
-      a.tap do |acc|
-        fields = entry.split(/ +/).map(&:strip)
-        acc[fields.last] = {}.tap do |res|
-          res[:given_state] = fields[0]
-          res[:uuid] = fields[1]
-          res[:pid] = fields[2]
-          res[:date] = fields[3]
-          res[:description] = fields.last
-        end
-      end
+    split_response = response.split(/\n/).map(&:strip)
+    ((/^total/.match(split_response.first)) ? split_response[1..-1] : []).each_with_object(Hash.new { |h,k| h[k] = []}) do |entry, h|
+      fields = entry.split(/\s +/)
+      h[fields.last] << {
+        :state => fields[0],
+        :uuid  => fields[1],
+        :pid   => fields[2]
+      }
     end
   end
 end
