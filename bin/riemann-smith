@@ -46,7 +46,7 @@ class Smith::Riemann
           results = parse_response(reply_payload.response)
 
           options[:agents].each do |agent|
-            if results.has_key?(agent) and results[agent].any? { |a| a[:state] == "running" and Sys::ProcTable.ps(a[:pid].to_i) }
+            if results.has_key?(agent) && results[agent].any? { |a| a[:state] == "running" && Sys::ProcTable.ps(a[:pid].to_i) }
               $stderr.puts "#{agent}: ok"
               report(
                 :host        => options[:event_host],
