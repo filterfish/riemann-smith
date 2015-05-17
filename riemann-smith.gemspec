@@ -2,8 +2,8 @@ require 'git-version-bump'
 
 Gem::Specification.new do |s|
   s.name    = 'riemann-smith'
-  s.version = GVB.version
-  s.date    = GVB.date
+  s.version = '0.3.1'
+  s.date    = Time.now.strftime("%Y-%m-%d")
 
   s.summary = "Monitor smith agents, reporting to Riemann"
 
@@ -13,7 +13,6 @@ Gem::Specification.new do |s|
   s.authors = ["Richard Heycock"]
   s.email   = "rgh@digivizer.com"
 
-  s.add_dependency "git-version-bump", "~> 0.10"
   s.add_dependency "riemann-tools"
   s.add_dependency "smith", "~> 0.6"
   s.add_dependency "sys-proctable"
@@ -21,7 +20,6 @@ Gem::Specification.new do |s|
   s.add_development_dependency 'yard'
   s.add_development_dependency 'bundler'
   s.add_development_dependency 'rake'
-  s.add_development_dependency 'github-release'
 
   s.executables = %w{queue-lengths riemann-smith}
 
