@@ -22,8 +22,6 @@ class Smith::Riemann
       options[:agents].uniq!
     end
 
-    @reply_queue = "riemann.#{Digest::SHA1.hexdigest(Time.now.to_s + $$.to_s)}"
-
     Smith.compile_acls
   end
 
@@ -41,7 +39,10 @@ class Smith::Riemann
           return
         end
 
-        queue.on_reply(:auto_ack => true, :reply_queue_name => @reply_queue) do |reply_payload, r|
+        # TODO remove this when smith randomises the reply queue name (probably > 0.7.2).
+        reply_queue = "riemann.#{Digest::SHA1.hexdigest(Time.now.to_s + $$.to_s)}"
+
+        queue.on_reply(:auto_ack => true, :reply_queue_name => reply_queue) do |reply_payload, r|
           results = parse_response(reply_payload.response)
 
           options[:agents].each do |agent|
