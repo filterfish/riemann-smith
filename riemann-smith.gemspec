@@ -2,7 +2,7 @@ require 'git-version-bump'
 
 Gem::Specification.new do |s|
   s.name    = 'riemann-smith'
-  s.version = '0.3.2'
+  s.version = '0.4.0'
   s.date    = Time.now.strftime("%Y-%m-%d")
 
   s.summary = "Monitor smith agents, reporting to Riemann"
@@ -13,7 +13,6 @@ Gem::Specification.new do |s|
   s.authors = ["Richard Heycock"]
   s.email   = "rgh@digivizer.com"
 
-  s.add_dependency "riemann-tools"
   s.add_dependency "smith", "~> 0.7"
   s.add_dependency "sys-proctable"
 
