@@ -6,6 +6,7 @@ Gem::Specification.new do |s|
   s.date    = Time.now.strftime("%Y-%m-%d")
 
   s.summary = "Monitor smith agents, reporting to Riemann"
+  s.description = "Integrate smith agent monitoring with Riemann"
 
   s.homepage = "https://github.com/filterfish/riemann-smith"
   s.license = "GPL-3.0"
@@ -14,11 +15,11 @@ Gem::Specification.new do |s|
   s.email   = "rgh@digivizer.com"
 
   s.add_dependency "smith", "~> 0.7"
-  s.add_dependency "sys-proctable"
+  s.add_dependency "sys-proctable", "~> 0.9"
 
-  s.add_development_dependency 'yard'
-  s.add_development_dependency 'bundler'
-  s.add_development_dependency 'rake'
+  s.add_development_dependency 'yard', "~> 0.8.7"
+  s.add_development_dependency 'bundler', "~> 1"
+  s.add_development_dependency 'rake', "~> 10"
 
   s.executables = %w{queue-lengths riemann-smith}
 
