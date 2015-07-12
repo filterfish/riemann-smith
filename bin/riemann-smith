@@ -1,89 +1,67 @@
 #!/usr/bin/env ruby
 
-require 'riemann/tools'
+require 'pp'
+require 'riemann'
 require 'sys/proctable'
+
 require 'smith'
 require 'smith/commands/common'
 
-class Smith::Riemann
-  include Riemann::Tools
-  include Smith::Commands::Common
 
-  opt :agency_timeout, "Max time (in seconds) to wait for the agency to respond", type: :int, default: 60
-  opt :service_name, "The name to associate with this health check", type: :string, default: "smith"
-  opt :agents, "Agents to monitor", type: :strings
-  opt :agent_group, "The name of an 'agent group' to monitor", type: :strings
+class Smith::Riemann
+
+  include Smith::Commands::Common
+  include Smith::Logger
+
+  RIEMANN_SERVICE_NAME = "smith"
 
   def initialize
-    options[:agents] ||= []
-
-    if options[:agent_group]
-      options[:agents] += options[:agent_group].map { |g| agent_group(g) }.flatten
-      options[:agents].uniq!
-    end
-
-    Smith.compile_acls
+    log_level :info
+    @riemann = Riemann::Client.new(:host => options[:host], :port => options[:port])
   end
 
-  def tick
-    Smith.start do
-      Smith::Messaging::Sender.new(Smith::QueueDefinitions::Agency_control) do |queue|
-        queue.on_timeout(options[:agency_timeout]) do |message_id|
-          report(
-            :host        => options[:event_host],
-            :service     => "#{options[:service_name]}.agency",
-            :state       => "critical",
-            :description => "Failed to respond in a timely fashion"
-          )
-          Smith.stop
-          return
-        end
+  def run
+    Smith::Messaging::Sender.new(Smith::QueueDefinitions::Agency_control) do |queue|
+      on_check { |check| @riemann << check }
 
-        # TODO remove this when smith randomises the reply queue name (probably > 0.7.2).
-        reply_queue = "riemann.#{Digest::SHA1.hexdigest(Time.now.to_s + $$.to_s)}"
+      EM.add_periodic_timer(options[:interval]) { run_check(queue) }
+    end
+  end
 
-        queue.on_reply(:auto_ack => true, :reply_queue_name => reply_queue) do |reply_payload, r|
-          results = parse_response(reply_payload.response)
+  def run_check(queue)
+    queue.on_timeout(options[:timeout]) do |message_id|
+      @on_check.call(alert(:agency, :timeout, "Agency timeout."))
+    end
 
-          options[:agents].each do |agent|
-            if results.has_key?(agent) && results[agent].any? { |a| a[:state] == "running" && Sys::ProcTable.ps(a[:pid].to_i) }
-              $stderr.puts "#{agent}: ok"
-              report(
-                :host        => options[:event_host],
-                :service     => "#{options[:service_name]}.#{agent}",
-                :state       => "ok",
-                :description => "Agent is running"
-              )
-            else
-              $stderr.puts "#{agent}: critical"
-              report(
-                :host        => options[:event_host],
-                :service     => "#{options[:service_name]}.#{agent}",
-                :state       => "critical",
-                :description => "Agent is not running"
-              )
-            end
-          end
+    queue.on_reply(:auto_ack => true, :reply_queue_name => "riemann.#{Digest::SHA1.hexdigest($$.to_s)}") do |reply_payload, r|
+      check(reply_payload.response).each do |agent|
+        @on_check.call(agent)
+      end
+    end
 
-          Smith.stop
-          return
-        end
+    queue.consumer_count do |count|
+      if count > 0
+        queue.publish(Smith::ACL::AgencyCommand.new(:command => 'list', :args => ['-a', '-l']))
+      else
+        @on_check.call(alert(:agency, :critical, "Agency not running."))
+      end
+    end
+  end
 
-        queue.consumer_count do |count|
-          if count == 0
-            report(
-              :host        => options[:event_host],
-              :service     => "#{options[:service_name]}.agency",
-              :state       => "critical",
-              :description => "Not running"
-            )
+  def on_check(&blk)
+    @on_check = blk
+  end
 
-            Smith.stop
-            return
-          else
-            queue.publish(Smith::ACL::AgencyCommand.new(:command => 'list', :args => ['-a', '-l']))
-          end
-        end
+  # Checks that the list of agents return from the list command matches
+  # the list of know agents and composes an appropriate alert.
+  def check(response)
+    agents = parse_response(response)
+
+    options[:agents].map do |agent_name|
+      if agents.has_key?(agent_name) && agents[agent_name].any? { |a| a[:state] == "running" && running?(a[:pid]) }
+        alert(agent_name, :running, "Agent running")
+      else
+        alert(agent_name, :critical, "Agent not running")
       end
     end
   end
@@ -91,15 +69,66 @@ class Smith::Riemann
   # Returns a Nested hash representing the running agents.
   def parse_response(response)
     split_response = response.split(/\n/).map(&:strip)
-    ((/^total/.match(split_response.first)) ? split_response[1..-1] : []).each_with_object(Hash.new { |h,k| h[k] = []}) do |entry, h|
-      fields = entry.split(/\s +/)
-      h[fields.last] << {
-        :state => fields[0],
-        :uuid  => fields[1],
-        :pid   => fields[2]
-      }
+    ((/^total/.match(split_response.first)) ? split_response[1..-1] : []).each_with_object(Hash.new { |h,k| h[k] = []}) do |e, acc|
+      fields = e.split(/\s +/)
+      acc[fields.last] << { :state => fields[0], :uuid => fields[1], :pid => fields[2], :description => fields.last }
+    end
+  end
+
+  # Construct an alert messages
+  def alert(service, state, description)
+    {:tags => options[:tags], :service => service(service), :state => state(state), :description => description}.tap { |a| puts "#{a[:service]}: #{state(state)}" }
+  end
+
+  # Return true if the given pid exists in the process table.
+  def running?(pid)
+    !(pid.nil? || Sys::ProcTable.ps(pid.to_i).nil?)
+  end
+
+  # Return the service name
+  def service(name)
+    "#{RIEMANN_SERVICE_NAME}:#{name}"
+  end
+
+  def state(state)
+    {:timeout => "timeout", :running => "ok", :critical => "critical"}[state]
+  end
+
+  def options
+    @options ||= begin
+      OptionParser.accept(Pathname) {|p,| Pathname.new(p) if p}
+
+      defaults = {:interval => 30, :timeout => 10, :agents => [], :tags => [], :host => 'localhost', :port => 5555, :agency_timeout => 60}
+      defaults.tap do |options|
+        parser = OptionParser.new do |opts|
+          opts.separator "\n"
+          opts.set_summary_indent "    "
+
+          opts.banner = "\nUsage: #{opts.program_name} OPTIONS"
+          opts.on_head "\n  Periodically lists the running agents and sends the result to riemann."
+
+          opts.on("--interval <i>", Integer, "Polling interval in seconds (default #{options[:interval]})") { |t| options[:interval] = t }
+          opts.on("--timeout <i>", Integer, "Agency timeout (default #{options[:timeout]})") { |t| options[:interval] = t }
+          opts.on("--host <s>", String, "Riemann host (default #{options[:host]})") { |v| options[:host] = v }
+          opts.on("--port <i>", Integer, "Riemann port (default #{options[:port]})") { |v| options[:port] = v }
+          opts.on("--tags <tag1,tag1,...>", Array, "Tags to add to the alert") { |t| options[:tags] = t }
+          opts.on("--agents <agent1,agent2,...>", Array, "Agents to monitor") { |v| options[:agents] + v }
+          opts.on("--agent-group  <group name>>", Array, "The name of an 'agent group' to monitor") do |g|
+            options[:agents] += g.map { |g| agent_group(g) }.flatten
+          end
+
+          opts.separator "\n"
+        end
+
+        parser.parse!
+      end
     end
   end
 end
 
-Smith::Riemann.run
+checker = Smith::Riemann.new
+
+Smith.compile_acls
+Smith.start do
+  checker.run
+end
