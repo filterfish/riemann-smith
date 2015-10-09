@@ -2,7 +2,7 @@ require 'git-version-bump'
 
 Gem::Specification.new do |s|
   s.name    = 'riemann-smith'
-  s.version = '0.4.0'
+  s.version = '0.5.0'
   s.date    = Time.now.strftime("%Y-%m-%d")
 
   s.summary = "Monitor smith agents, reporting to Riemann"
