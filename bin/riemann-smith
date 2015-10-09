@@ -13,7 +13,7 @@ class Smith::Riemann
   include Smith::Commands::Common
   include Smith::Logger
 
-  RIEMANN_SERVICE_NAME = "smith"
+  RIEMANN_SERVICE_NAME = "smith-agent"
 
   def initialize
     log_level :info
@@ -55,15 +55,24 @@ class Smith::Riemann
   # Checks that the list of agents return from the list command matches
   # the list of know agents and composes an appropriate alert.
   def check(response)
-    agents = parse_response(response)
+    options[:group].map do |group|
+      begin
+        group_agents = options[:agents] + agent_group(group)
+        running_agents = parse_response(response)
 
-    options[:agents].map do |agent_name|
-      if agents.has_key?(agent_name) && agents[agent_name].any? { |a| a[:state] == "running" && running?(a[:pid]) }
-        alert(agent_name, :running, "Agent running")
-      else
-        alert(agent_name, :critical, "Agent not running")
+        group_agents.map do |agent_name|
+          if running_agents.has_key?(agent_name) && running_agents[agent_name].any? { |a| a[:state] == "running" && running?(a[:pid]) }
+            alert(agent_name, :running, "Agent running")
+          else
+            alert(agent_name, :critical, "Agent not running")
+          end
+        end
+      rescue RuntimeError => e
+        pp e
+        alert("group #{group}", :critical, e.message)
+        options[:agents]
       end
-    end
+    end.flatten
   end
 
   # Returns a Nested hash representing the running agents.
@@ -77,7 +86,7 @@ class Smith::Riemann
 
   # Construct an alert messages
   def alert(service, state, description)
-    {:tags => options[:tags], :service => service(service), :state => state(state), :description => description}.tap { |a| puts "#{a[:service]}: #{state(state)}" }
+    {:tags => options[:tags], :ttl => options[:ttl], :service => service(service), :state => state(state), :description => description}.tap { |a| puts "#{a[:service]}: #{state(state)}" }
   end
 
   # Return true if the given pid exists in the process table.
@@ -98,7 +107,7 @@ class Smith::Riemann
     @options ||= begin
       OptionParser.accept(Pathname) {|p,| Pathname.new(p) if p}
 
-      defaults = {:interval => 30, :timeout => 10, :agents => [], :tags => [], :host => 'localhost', :port => 5555, :agency_timeout => 60}
+      defaults = {:interval => 30, :ttl => nil, :timeout => 11, :agents => [], :group => [], :tags => [], :host => 'localhost', :port => 5555, :agency_timeout => 60}
       defaults.tap do |options|
         parser = OptionParser.new do |opts|
           opts.separator "\n"
@@ -107,15 +116,15 @@ class Smith::Riemann
           opts.banner = "\nUsage: #{opts.program_name} OPTIONS"
           opts.on_head "\n  Periodically lists the running agents and sends the result to riemann."
 
+          opts.on("--ttl <i>", Integer, "TTL for events") { |t| options[:ttl] = t }
           opts.on("--interval <i>", Integer, "Polling interval in seconds (default #{options[:interval]})") { |t| options[:interval] = t }
           opts.on("--timeout <i>", Integer, "Agency timeout (default #{options[:timeout]})") { |t| options[:interval] = t }
           opts.on("--host <s>", String, "Riemann host (default #{options[:host]})") { |v| options[:host] = v }
           opts.on("--port <i>", Integer, "Riemann port (default #{options[:port]})") { |v| options[:port] = v }
           opts.on("--tags <tag1,tag1,...>", Array, "Tags to add to the alert") { |t| options[:tags] = t }
+
           opts.on("--agents <agent1,agent2,...>", Array, "Agents to monitor") { |v| options[:agents] + v }
-          opts.on("--agent-group  <group name>>", Array, "The name of an 'agent group' to monitor") do |g|
-            options[:agents] += g.map { |g| agent_group(g) }.flatten
-          end
+          opts.on("--agent-group  <group name>>", Array, "The name of an 'agent group' to monitor") { |g| options[:group] += g }
 
           opts.separator "\n"
         end
