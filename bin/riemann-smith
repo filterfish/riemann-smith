@@ -21,7 +21,6 @@ class Smith::Riemann
   RIEMANN_SERVICE_NAME = "smith-agent"
 
   def initialize
-    log_level :info
     @riemann = Riemann::Client.new(:host => options[:host], :port => options[:port])
   end
 
@@ -89,7 +88,7 @@ class Smith::Riemann
 
   # Construct an alert messages
   def alert(service, state, description)
-    {:tags => options[:tags], :ttl => options[:ttl], :service => service(service), :state => state(state), :description => description}.tap { |a| puts "#{a[:service]}: #{state(state)}" }
+    {:tags => options[:tags], :ttl => options[:ttl], :service => service(service), :state => state(state), :description => description}.tap { |a| logger.info { "#{a[:service]}: #{state(state)}" } }
   end
 
   # Return true if the given pid exists in the process table.
