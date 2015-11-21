@@ -7,6 +7,11 @@ require 'sys/proctable'
 require 'smith'
 require 'smith/commands/common'
 
+class Riemann::Client
+  def send_maybe_recv(*a)
+    @tcp.send_maybe_recv *a
+  end
+end
 
 class Smith::Riemann
 
