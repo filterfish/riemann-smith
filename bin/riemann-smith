@@ -73,9 +73,7 @@ class Smith::Riemann
           end
         end
       rescue RuntimeError => e
-        pp e
-        alert("group #{group}", :critical, e.message)
-        options[:agents]
+        alert("Group #{group}: #{e.message}", :critical, e.message)
       end
     end.flatten
   end
