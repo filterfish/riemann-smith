@@ -14,7 +14,7 @@ Gem::Specification.new do |s|
   s.authors = ["Richard Heycock"]
   s.email   = "rgh@digivizer.com"
 
-  s.add_dependency "smith", "~> 0.7"
+  s.add_dependency "smith", "~> 0.7", ">= 0.7.4"
   s.add_dependency "sys-proctable", "~> 0.9"
 
   s.add_development_dependency 'yard', "~> 0.8.7"

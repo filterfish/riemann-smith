@@ -25,7 +25,7 @@ class Smith::Riemann
   end
 
   def run
-    Smith::Messaging::Sender.new(Smith::QueueDefinitions::Agency_control) do |queue|
+    Smith::Messaging::Sender.new(Smith::QueueDefinitions::Agency_control.call) do |queue|
       on_check { |check| @riemann << check }
 
       EM.add_periodic_timer(options[:interval]) { run_check(queue) }
