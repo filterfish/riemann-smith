@@ -148,7 +148,14 @@ end
 
 checker = Smith::Riemann.new
 
-Smith.compile_acls
-Smith.start do
-  checker.run
+begin
+  include Smith::Logger
+
+  Smith.compile_acls
+  Smith.start do
+    checker.run
+  end
+rescue => e
+  logger.fatal(e.message)
+  logger.fatal("Exiting")
 end
