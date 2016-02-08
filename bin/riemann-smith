@@ -18,7 +18,7 @@ class Smith::Riemann
   include Smith::Commands::Common
   include Smith::Logger
 
-  RIEMANN_SERVICE_NAME = "smith-agent"
+  SERVICE_NAME = "Smith"
 
   def initialize
     @riemann = Riemann::Client.new(:host => options[:host], :port => options[:port])
@@ -98,7 +98,7 @@ class Smith::Riemann
 
   # Return the service name
   def service(name)
-    "#{RIEMANN_SERVICE_NAME}:#{name}"
+    "#{SERVICE_NAME} #{name}"
   end
 
   def state(state)
