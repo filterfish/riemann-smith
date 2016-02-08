@@ -26,7 +26,14 @@ class Smith::Riemann
 
   def run
     Smith::Messaging::Sender.new(Smith::QueueDefinitions::Agency_control.call) do |queue|
-      on_check { |check| @riemann << check }
+      on_check do |check|
+        @riemann << check
+      end
+
+      queue.on_error do |channel, channel_close|
+        logger.fatal { "Channel error: #{channel_close.reply_code}: #{channel_close.reply_text}." }
+        Smith.stop
+      end
 
       EM.add_periodic_timer(options[:interval]) { run_check(queue) }
     end
