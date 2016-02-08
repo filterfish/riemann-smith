@@ -40,6 +40,8 @@ class Smith::Riemann
   end
 
   def run_check(queue)
+    @on_check.call(alert(:heartbeat, :running, "riemann-smith heatbeat", :ttl => options[:interval] * 2))
+
     queue.on_timeout(options[:timeout]) do |message_id|
       @on_check.call(alert(:agency, :timeout, "Agency timeout."))
     end
@@ -94,8 +96,8 @@ class Smith::Riemann
   end
 
   # Construct an alert messages
-  def alert(service, state, description)
-    {:tags => options[:tags], :ttl => options[:ttl], :service => service(service), :state => state(state), :description => description}.tap { |a| logger.info { "#{a[:service]}: #{state(state)}" } }
+  def alert(service, state, description, extra={})
+    {:tags => options[:tags], :ttl => options[:ttl], :service => service(service), :state => state(state), :description => description}.merge(extra).tap { |a| logger.info { "#{a[:service]}: #{state(state)}" } }
   end
 
   # Return true if the given pid exists in the process table.
